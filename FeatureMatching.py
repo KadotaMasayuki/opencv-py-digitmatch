@@ -203,8 +203,12 @@ def main():
     while (True):
         ret, srcFrame = cap.read()
         srcViewFrame = srcFrame.copy()
-        cv2.rectangle(srcViewFrame, (frameTopX, frameTopY, frameSizeX, frameSizeY), (128, 128, 0), 2)
-        srcViewFrame = expand(srcViewFrame, 0.7)
+        cv2.rectangle(srcViewFrame,
+                      (frameTopX, frameTopY),
+                      (frameTopX + frameSizeX, frameTopY + frameSizeY),
+                      (128, 128, 0),
+                      2)
+        srcViewFrame = expand(srcViewFrame, 0.7, 0.7)
         cv2.imshow('view', srcViewFrame)
         
         aFrame = expand(srcFrame[frameTopY-int(mergin/expandRatio):frameTopY+frameSizeY+int(mergin/expandRatio),
@@ -220,7 +224,11 @@ def main():
         aFrame = gray(aFrame)
         aFrame = erode(aFrame, 2, 2, 1)
         aKPFrame = addKeypoints(aFrame)
-        cv2.rectangle(aKPFrame, (mergin, mergin, int(frameSizeX * expandRatio), int(frameSizeY * expandRatio)), (128, 128, 0), 2)
+        cv2.rectangle(aKPFrame,
+                      (mergin, mergin),
+                      (mergin + int(frameSizeX * expandRatio), mergin + int(frameSizeY * expandRatio)),
+                      (128, 128, 0),
+                      2)
         cv2.imshow('scene', aKPFrame)
 
         sceneFrame = aFrame

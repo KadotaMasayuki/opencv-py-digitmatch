@@ -62,45 +62,65 @@ def match1to1(template_image, scene_image, threshold_factor=0.6, knn=False):
 
 def addWeight(srcFrame, gain=7.2, gamma=1.2):
     # コントラストとガンマで重み付け
-    resultFrame = srcFrame.copy()
-    h, w, c = srcFrame.shape
+    if (len(srcFrame.shape) >=3):
+        h, w, c = srcFrame.shape
+        resultFrame = srcFrame.copy()
+    else:
+        h, w = srcFrame.shape
+        c = 1
+        resultFrame = np.empty((h, w, 1), dtype=np.uint8)
+        resultFrame[:,:,0] = srcFrame
     lookuptable = np.ones((256, 1), np.uint8)
     for i in range(256):
         lookuptable[i] = int(255.0 / (1 + math.exp(-gain * (i - 128) / 255.0)));
     for i in range(c):
-        resultFrame[:,:,i] = cv2.LUT(srcFrame[:,:,i], lookuptable)
+        resultFrame[:,:,i] = cv2.LUT(resultFrame[:,:,i], lookuptable)
     if (gamma != 1):
         gammaLookuptable = np.ones((256, 1), np.uint8)
         for i in range(256):
             gammaLookuptable[i] = int(((i / 255.0) ** (1.0 / gamma)) * 255.0);
         for i in range(c):
             resultFrame[:,:,i] = cv2.LUT(resultFrame[:,:,i], gammaLookuptable)
-    return resultFrame
+    return resultFrame if c != 1 else resultFrame[:,:,0]
+
 def stretchLevelRange(srcFrame, minLevel=0, maxLevel=255):
     # 色レベルを min - max間 に配置する
-    resultFrame = srcFrame.copy()
-    h, w, c = srcFrame.shape
+    if (len(srcFrame.shape) >=3):
+        h, w, c = srcFrame.shape
+        resultFrame = srcFrame.copy()
+    else:
+        h, w = srcFrame.shape
+        c = 1
+        resultFrame = np.empty((h, w, 1), dtype=np.uint8)
+        resultFrame[:,:,0] = srcFrame
     for i in range(c):
-        min = np.min(srcFrame[:,:,i])
-        max = np.max(srcFrame[:,:,i])
-        resultFrame[:,:,i] = (srcFrame[:,:,i] - min) * 255.0 / (max - min)
-    return resultFrame
+        min = np.min(resultFrame[:,:,i])
+        max = np.max(resultFrame[:,:,i])
+        resultFrame[:,:,i] = (resultFrame[:,:,i] - min) * 255.0 / (max - min)
+    return resultFrame if c != 1 else resultFrame[:,:,0]
+
 def arrangeLevelRange(srcFrame, baseLevel=127, minLevel=0, maxLevel=255):
     # レベル補正する(複数画像のレベルを合わせるときに使用)
-    resultFrame = srcFrame.copy()
-    h, w, c = srcFrame.shape
+    if (len(srcFrame.shape) >=3):
+        h, w, c = srcFrame.shape
+        resultFrame = srcFrame.copy()
+    else:
+        h, w = srcFrame.shape
+        c = 1
+        resultFrame = np.empty((h, w, 1), dtype=np.uint8)
+        resultFrame[:,:,0] = srcFrame
     lookuptable = np.zeros((256,1), np.uint8)
     for i in range(c):
-        mean = int(np.mean(srcFrame[:,:,i]))
-        min = int(np.min(srcFrame[:,:,i]))
-        max = int(np.max(srcFrame[:,:,i]))
+        mean = int(np.mean(resultFrame[:,:,i]))
+        min = int(np.min(resultFrame[:,:,i]))
+        max = int(np.max(resultFrame[:,:,i]))
         if (ENABLE_DEBUG):
-            std = np.std(srcFrame[:,:,i])
+            std = np.std(resultFrame[:,:,i])
         for j in range(min, mean):
             lookuptable[j][0] = (float(j) - (min - minLevel)) * float(baseLevel - minLevel) / (mean - min)
         for j in range(mean, max + 1):
             lookuptable[j][0] = (float(j) - (mean - baseLevel)) * float(maxLevel - baseLevel) / (max - mean)
-        resultFrame[:,:,i] = cv2.LUT(srcFrame[:,:,i], lookuptable)
+        resultFrame[:,:,i] = cv2.LUT(resultFrame[:,:,i], lookuptable)
         if (ENABLE_DEBUG):
             mean2 = int(np.mean(resultFrame[:,:,i]))
             min2 = int(np.min(resultFrame[:,:,i]))
@@ -108,18 +128,25 @@ def arrangeLevelRange(srcFrame, baseLevel=127, minLevel=0, maxLevel=255):
             std2 = np.std(resultFrame[:,:,i])
             print("arrangeLevel:c={0}, max={1}/{2}, min={3}/{4}, mean={5:.3f}/{6:.3f}, std={7:.3f}/{8:.3f}".format(i, max, max2, min, min2, mean, mean2, std, std2))
             cv2.waitKey(0)
-    return resultFrame
+    return resultFrame if c != 1 else resultFrame[:,:,0]
+
 def arrangeLevelStddev(srcFrame, baseLevel=127, stdDevWeight=127):
     # レベル補正する(複数画像のレベルを合わせるときに使用)
-    resultFrame = srcFrame.copy()
-    h, w, c = srcFrame.shape
+    if (len(srcFrame.shape) >=3):
+        h, w, c = srcFrame.shape
+        resultFrame = srcFrame.copy()
+    else:
+        h, w = srcFrame.shape
+        c = 1
+        resultFrame = np.empty((h, w, 1), dtype=np.uint8)
+        resultFrame[:,:,0] = srcFrame
     for i in range(c):
-        mean = np.mean(srcFrame[:,:,i])
-        std = np.std(srcFrame[:,:,i])
+        mean = np.mean(resultFrame[:,:,i])
+        std = np.std(resultFrame[:,:,i])
         if (ENABLE_DEBUG):
-            min = np.min(srcFrame[:,:,i])
-            max = np.max(srcFrame[:,:,i])
-        resultFrame[:,:,i] = ((srcFrame[:,:,i] - mean) / std) * stdDevWeight + baseLevel
+            min = np.min(resultFrame[:,:,i])
+            max = np.max(resultFrame[:,:,i])
+        resultFrame[:,:,i] = ((resultFrame[:,:,i] - mean) / std) * stdDevWeight + baseLevel
         if (ENABLE_DEBUG):
             mean2 = int(np.mean(resultFrame[:,:,i]))
             min2 = int(np.min(resultFrame[:,:,i]))
@@ -127,13 +154,16 @@ def arrangeLevelStddev(srcFrame, baseLevel=127, stdDevWeight=127):
             std2 = np.std(resultFrame[:,:,i])
             print("arrangeLevelStddev:c={0}, max={1}/{2}, min={3}/{4}, mean={5:.3f}/{6:.3f}, std={7:.3f}/{8:.3f}".format(i, max, max2, min, min2, mean, mean2, std, std2))
             cv2.waitKey(0)
-    return resultFrame
+    return resultFrame if c != 1 else resultFrame[:,:,0]
+
 def expand(srcFrame, expandRatioX=1.5, expandRatioY=1.5):
     # 画像を伸縮 (各種画像処理前に実施しないとボケる)
     return cv2.resize(srcFrame, None, fx=expandRatioX, fy=expandRatioY)
+
 def gray(srcFrame):
     # グレー画像
     return cv2.cvtColor(srcFrame, cv2.COLOR_BGR2GRAY)
+
 def blur(srcFrame, blurX=1, blurY=1):
     # ボケ(1より大きい奇数)
     if (blurX > 0):
@@ -144,6 +174,7 @@ def blur(srcFrame, blurX=1, blurY=1):
         return cv2.GaussianBlur(srcFrame, (blurX, blurY), 0)
     else:
         return srcFrame
+
 def threshold(srcFrame, thresholdBlockSize=3, thresholdConstant=2):
     # 二値化(3より大きい奇数)
     if (thresholdBlockSize >= 3):
@@ -153,6 +184,13 @@ def threshold(srcFrame, thresholdBlockSize=3, thresholdConstant=2):
                                      thresholdBlockSize, thresholdConstant)
     else:
         return srcFrame
+
+def thresholdOtsu(srcFrame):
+    # 大津の二値化 blur() してから適用すると良好
+    # http://labs.eecs.tottori-u.ac.jp/sd/Member/oyamada/OpenCV/html/py_tutorials/py_imgproc/py_thresholding/py_thresholding.html
+    _, resultFrame = cv2.threshold(srcFrame, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return resultFrame
+
 def erode(srcFrame, erodeSizeX=1, erodeSizeY=1, erodeTime=1):
     # 黒を拡大
     if (erodeSizeX > 0 and erodeSizeY > 0 and erodeTime > 0):
@@ -160,6 +198,7 @@ def erode(srcFrame, erodeSizeX=1, erodeSizeY=1, erodeTime=1):
         return cv2.erode(srcFrame, kernel, iterations=erodeTime)
     else:
         return srcFrame
+
 def canny(srcFrame, cannyMaxVal=200, cannyMinVal=100, cannySobelSize=3, cannyGradient=False):
     # エッジ検出(sobelSizeは3より大きい奇数)
     if (cannySobelSize > 0):
@@ -169,22 +208,21 @@ def canny(srcFrame, cannyMaxVal=200, cannyMinVal=100, cannySobelSize=3, cannyGra
                          None, cannySobelSize, cannyGradient)
     else:
         return srcFrame
+
 def invert(srcFrame):
     # 色反転
-    if (invert1):
-        return cv2.bitwise_not(srcFrame)
-    else:
-        return srcFrame
+    return cv2.bitwise_not(srcFrame)
+
 def addMergin(srcFrame, merginSize=40, merginColor=0):
     # グレー画像に余白を付ける(Canny後の背景色は黒)
-    h,w,c = srcFrame.shape
-    if (c == 1):
+    if (len(srcFrame.shape) < 3):
         resultFrame = np.ones((h + merginSize * 2, w + merginSize * 2), np.uint8)
         resultFrame[:,:] = merginColor
         resultFrame[merginSize:merginSize + h, merginSize:merginSize + w] = srcFrame
         return resultFrame
     else:
         return srcFrame
+
 def addKeypoints(srcFrame):
     # 特徴点を描画した画像を返す
     detector = cv2.AKAZE_create()

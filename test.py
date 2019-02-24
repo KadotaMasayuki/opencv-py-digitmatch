@@ -82,6 +82,7 @@ def addWeight(srcFrame, gain=7.2, gamma=1.2):
         for i in range(c):
             resultFrame[:,:,i] = cv2.LUT(resultFrame[:,:,i], gammaLookuptable)
     return resultFrame if c != 1 else resultFrame[:,:,0]
+
 def stretchLevelRange(srcFrame, minLevel=0, maxLevel=255):
     # 色レベルを min - max間 に配置する
     if (len(srcFrame.shape) >=3):
@@ -97,6 +98,7 @@ def stretchLevelRange(srcFrame, minLevel=0, maxLevel=255):
         max = np.max(resultFrame[:,:,i])
         resultFrame[:,:,i] = (resultFrame[:,:,i] - min) * 255.0 / (max - min)
     return resultFrame if c != 1 else resultFrame[:,:,0]
+
 def arrangeLevelRange(srcFrame, baseLevel=127, minLevel=0, maxLevel=255):
     # レベル補正する(複数画像のレベルを合わせるときに使用)
     if (len(srcFrame.shape) >=3):
@@ -127,6 +129,7 @@ def arrangeLevelRange(srcFrame, baseLevel=127, minLevel=0, maxLevel=255):
             print("arrangeLevel:c={0}, max={1}/{2}, min={3}/{4}, mean={5:.3f}/{6:.3f}, std={7:.3f}/{8:.3f}".format(i, max, max2, min, min2, mean, mean2, std, std2))
             cv2.waitKey(0)
     return resultFrame if c != 1 else resultFrame[:,:,0]
+
 def arrangeLevelStddev(srcFrame, baseLevel=127, stdDevWeight=127):
     # レベル補正する(複数画像のレベルを合わせるときに使用)
     if (len(srcFrame.shape) >=3):
@@ -152,12 +155,15 @@ def arrangeLevelStddev(srcFrame, baseLevel=127, stdDevWeight=127):
             print("arrangeLevelStddev:c={0}, max={1}/{2}, min={3}/{4}, mean={5:.3f}/{6:.3f}, std={7:.3f}/{8:.3f}".format(i, max, max2, min, min2, mean, mean2, std, std2))
             cv2.waitKey(0)
     return resultFrame if c != 1 else resultFrame[:,:,0]
+
 def expand(srcFrame, expandRatioX=1.5, expandRatioY=1.5):
     # 画像を伸縮 (各種画像処理前に実施しないとボケる)
     return cv2.resize(srcFrame, None, fx=expandRatioX, fy=expandRatioY)
+
 def gray(srcFrame):
     # グレー画像
     return cv2.cvtColor(srcFrame, cv2.COLOR_BGR2GRAY)
+
 def blur(srcFrame, blurX=1, blurY=1):
     # ボケ(1より大きい奇数)
     if (blurX > 0):
@@ -168,6 +174,7 @@ def blur(srcFrame, blurX=1, blurY=1):
         return cv2.GaussianBlur(srcFrame, (blurX, blurY), 0)
     else:
         return srcFrame
+
 def threshold(srcFrame, thresholdBlockSize=3, thresholdConstant=2):
     # 二値化(3より大きい奇数)
     if (thresholdBlockSize >= 3):
@@ -177,6 +184,13 @@ def threshold(srcFrame, thresholdBlockSize=3, thresholdConstant=2):
                                      thresholdBlockSize, thresholdConstant)
     else:
         return srcFrame
+
+def thresholdOtsu(srcFrame):
+    # 大津の二値化 blur() してから適用すると良好
+    # http://labs.eecs.tottori-u.ac.jp/sd/Member/oyamada/OpenCV/html/py_tutorials/py_imgproc/py_thresholding/py_thresholding.html
+    _, resultFrame = cv2.threshold(srcFrame, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return resultFrame
+
 def erode(srcFrame, erodeSizeX=1, erodeSizeY=1, erodeTime=1):
     # 黒を拡大
     if (erodeSizeX > 0 and erodeSizeY > 0 and erodeTime > 0):
@@ -184,6 +198,7 @@ def erode(srcFrame, erodeSizeX=1, erodeSizeY=1, erodeTime=1):
         return cv2.erode(srcFrame, kernel, iterations=erodeTime)
     else:
         return srcFrame
+
 def canny(srcFrame, cannyMaxVal=200, cannyMinVal=100, cannySobelSize=3, cannyGradient=False):
     # エッジ検出(sobelSizeは3より大きい奇数)
     if (cannySobelSize > 0):
@@ -193,9 +208,11 @@ def canny(srcFrame, cannyMaxVal=200, cannyMinVal=100, cannySobelSize=3, cannyGra
                          None, cannySobelSize, cannyGradient)
     else:
         return srcFrame
+
 def invert(srcFrame):
     # 色反転
     return cv2.bitwise_not(srcFrame)
+
 def addMergin(srcFrame, merginSize=40, merginColor=0):
     # グレー画像に余白を付ける(Canny後の背景色は黒)
     if (len(srcFrame.shape) < 3):
@@ -205,6 +222,7 @@ def addMergin(srcFrame, merginSize=40, merginColor=0):
         return resultFrame
     else:
         return srcFrame
+
 def addKeypoints(srcFrame):
     # 特徴点を描画した画像を返す
     detector = cv2.AKAZE_create()
@@ -254,8 +272,8 @@ def main():
 #        aFrame = gray(aFrame)
 #        aFrame = invert(aFrame)
 #        aFrame = threshold(aFrame, thresholdBlockSize=21, thresholdConstant=9)
-#        aFrame = blur(aFrame, 5, 5)
-
+        aFrame = blur(aFrame, 5, 5)
+        aFrame = thresholdOtsu(aFrame)
         aKPFrame = addKeypoints(aFrame)
         cv2.rectangle(aKPFrame,
                       (mergin, mergin),

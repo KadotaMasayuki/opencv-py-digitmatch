@@ -315,7 +315,7 @@ def main():
                     # 同一ファイル名なら追番を付与
                     templateFilePath = "./template_" + t + "_" + str(n) + ".png"
                     if (not os.path.exists(templateFilePath)):
-                        cv2.imwrite(templateFilePath, scenes[0])
+                        cv2.imwrite(templateFilePath, template)
                         break
                     n = n + 1
         elif (k == ord('m')):

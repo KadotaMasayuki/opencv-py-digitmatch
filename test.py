@@ -309,9 +309,9 @@ def main():
 
         aFrame = baseFrame.copy()
         
-        aFrame = gray(baseFrame)
+        aFrame = gray(aFrame)
         aFrame = erode(aFrame, 5, 5, 1)
-        aFrame = addWeight(aFrame, gain=10.2, gamma=4.3)
+        aFrame = addWeight(aFrame, gain=14.2, gamma=4.3)
 #        aFrame = arrangeLevelRange(aFrame, baseLevel=130, minLevel=10, maxLevel=245)
         aFrame = stretchLevelRange(aFrame, minLevel=0, maxLevel=255)
 
@@ -331,8 +331,8 @@ def main():
             cv2.rectangle(aKPFrame,
                           (mergin + int((frames[i][0] - frames[0][0]) * expandRatio), mergin + int((frames[i][1] - frames[0][1]) * expandRatio)),
                           (mergin + int((frames[i][2] - frames[0][0]) * expandRatio), mergin + int((frames[i][3] - frames[0][1]) * expandRatio)),
-                          (0, 0, 255) if (i == currentFragment) else (0, 128, 255),
-                          1)
+                          (0, 0, 255) if (i == currentFragment) else (0, 255, 128),
+                          4 if (i == currentFragment) else 2)
             scenes.append(aFrame[(mergin + int((frames[i][1] - frames[0][1]) * expandRatio)):(mergin + int((frames[i][3] - frames[0][1]) * expandRatio)),
                                  (mergin + int((frames[i][0] - frames[0][0]) * expandRatio)):(mergin + int((frames[i][2] - frames[0][0]) * expandRatio))])
         cv2.imshow('scene', aKPFrame)

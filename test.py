@@ -21,14 +21,32 @@ def enableDebug(enableDebug):
     global ENABLE_DEBUG
     ENABLE_DEBUG = enableDebug
 
-def match1to1(template_image, scene_image, threshold_factor=0.6, knn=False):
+def templateMatch1to1(templateImage, sceneImage, method=cv2.TM_CCOEFF_NORMED):
+    # method:
+    #  'cv2.TM_CCOEFF', 'cv2.TM_CCOEFF_NORMED', 'cv2.TM_CCORR',
+    #  'cv2.TM_CCORR_NORMED', 'cv2.TM_SQDIFF', 'cv2.TM_SQDIFF_NORMED'
+    result = cv2.matchTemplate(sceneImage, templateImage, method)
+    minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+    if (ENABLE_DEBUG):
+        print("template match:{0}/{1}/{2}/{3}".format(minVal, maxVal, minLoc, maxLoc))
+    if (method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]):
+        topLeft = minLoc
+        score = 1 / minVal
+    else:
+        topLeft = maxLoc
+        score = maxVal
+    resultImage = sceneImage.copy()
+    cv2.rectangle(resultImage, (topLeft), (topLeft[0] + templateImage.shape[1], topLeft[1] + templateImage.shape[0]), (0, 255, 0), 3)
+    return resultImage, score
+
+def featureMatch1to1(templateImage, sceneImage, thresholdFactor=0.6, knn=False):
     try:
         #特徴抽出機の生成
         detector = cv2.AKAZE_create()
 
         #kpは特徴的な点の位置 destは特徴を現すベクトル
-        kp1, des1 = detector.detectAndCompute(template_image, None)
-        kp2, des2 = detector.detectAndCompute(scene_image, None)
+        kp1, des1 = detector.detectAndCompute(templateImage, None)
+        kp2, des2 = detector.detectAndCompute(sceneImage, None)
 
         #特徴点の比較機
         bf = cv2.BFMatcher()
@@ -37,10 +55,10 @@ def match1to1(template_image, scene_image, threshold_factor=0.6, knn=False):
             # Kマッチ
             matches = bf.knnMatch(des1, des2, k=2)
             # 2点間の割合試験を適用。隣接する2点のうちdistanceの割合が一定以上大きいもののみ格納する
-            good = [[m] for m, n in matches if float(m.distance) < threshold_factor * float(n.distance)]
+            good = [[m] for m, n in matches if float(m.distance) < thresholdFactor * float(n.distance)]
             # cv2.drawMatches***は適合している点を結ぶ画像を生成する
-            result_image = cv2.drawMatchesKnn(template_image, kp1, scene_image, kp2, good, None, flags=2)
-            return result_image, len(good)
+            resultImage = cv2.drawMatchesKnn(templateImage, kp1, sceneImage, kp2, good, None, flags=2)
+            return resultImage, len(good)
         else:
             # 全マッチ
             matches = bf.match(des1, des2)
@@ -51,14 +69,39 @@ def match1to1(template_image, scene_image, threshold_factor=0.6, knn=False):
             if (len(matches) >= 1):
                 maxDistance = float(matches[len(matches) - 1].distance)
                 # 最小distanceに近いmatch値のみを取得
-                good = [i for i in matches if float(i.distance) < threshold_factor * maxDistance]
+                good = [i for i in matches if float(i.distance) < thresholdFactor * maxDistance]
             else:
                 good = matches
             # cv2.drawMatches***は適合している点を結ぶ画像を生成する
-            result_image = cv2.drawMatches(template_image, kp1, scene_image, kp2, good, None, flags=2)
-            return result_image, len(good)
+            resultImage = cv2.drawMatches(templateImage, kp1, sceneImage, kp2, good, None, flags=2)
+            return resultImage, len(good)
     except:
-        return template_image, 0
+        return templateImage, 0
+
+def match(scenes):
+    # 'm' で、保存したテンプレート郡と一括マッチング (表示後、キー入力待ちで止める)
+    guesses = []
+    p = Path('./')
+    for i in range(len(scenes)):
+        maxScore = 0
+        maxTemplate = ''
+        for f in p.glob('template_*.png'):
+            tmpl = cv2.imread(f.as_posix(), 0)
+            #guessFrame, score = featureMatch1to1(expand(tmpl, 2, 2), expand(scenes[i], 2, 2), 0.2)
+            guessFrame, score = templateMatch1to1(expand(tmpl, 2, 2), expand(scenes[i], 2, 2)) # グレー画像のみ
+            if (score > maxScore):
+                maxScore = score
+                maxTemplate = str(f)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(guessFrame, "scene {0}".format(i), (10, 20), font, 0.5, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.putText(guessFrame, "name {0}".format(f), (10, 40), font, 0.5, (0,0,255), 2, cv2.LINE_AA)
+            cv2.putText(guessFrame, "score {0}".format(score), (10, 60), font, 0.5, (0,0,255), 2, cv2.LINE_AA)
+            cv2.imshow('result_{0}'.format(f), guessFrame)
+        if (len(maxTemplate) > len("template_")):
+            guesses.append(maxTemplate[len("template_")])
+        else:
+            guesses.append("")
+    return guesses
 
 def addWeight(srcFrame, gain=7.2, gamma=1.2):
     # コントラストとガンマで重み付け
@@ -241,6 +284,7 @@ def main():
 
     template = np.zeros((frameSizeX, frameSizeY), np.uint8)
     currentFragment = 0
+    autoMatch = 0
     while (True):
         ret, srcFrame = cap.read()
         srcViewFrame = srcFrame.copy()
@@ -258,12 +302,14 @@ def main():
         srcViewFrame = expand(srcViewFrame, 0.7, 0.7)
         cv2.imshow('view', srcViewFrame)
         
-        aFrame = expand(srcFrame[frameTopY-int(mergin/expandRatio):frameTopY+frameSizeY+int(mergin/expandRatio),
+        baseFrame = expand(srcFrame[frameTopY-int(mergin/expandRatio):frameTopY+frameSizeY+int(mergin/expandRatio),
                                  frameTopX-int(mergin/expandRatio):frameTopX+frameSizeX+int(mergin/expandRatio)],
                                  expandRatio, expandRatio)
-        cv2.imshow('expended', aFrame)
+        cv2.imshow('expended', baseFrame)
 
-        aFrame = gray(aFrame)
+        aFrame = baseFrame.copy()
+        
+        aFrame = gray(baseFrame)
         aFrame = erode(aFrame, 5, 5, 1)
         aFrame = addWeight(aFrame, gain=10.2, gamma=4.3)
 #        aFrame = arrangeLevelRange(aFrame, baseLevel=130, minLevel=10, maxLevel=245)
@@ -291,20 +337,37 @@ def main():
                                  (mergin + int((frames[i][0] - frames[0][0]) * expandRatio)):(mergin + int((frames[i][2] - frames[0][0]) * expandRatio))])
         cv2.imshow('scene', aKPFrame)
 
-        instantGuessFrame, score = match1to1(template, aFrame, 0.8)
+        #instantGuessFrame, score = featureMatch1to1(template, aFrame, 0.2)
+        instantGuessFrame, score = templateMatch1to1(template, aFrame)
         cv2.imshow('instant guess', instantGuessFrame)
+        
+        if (autoMatch > 0):
+            resultFrame = baseFrame.copy()
+            guesses = match(scenes)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            for i in range(len(scenes)):
+                cv2.putText(resultFrame, "'{0}'".format(guesses[i]),
+                            (20 + mergin + int((frames[i][0] - frames[0][0]) * expandRatio), 50 + mergin + int((frames[i][1] - frames[0][1]) * expandRatio)),
+                            font, 1.1, (0,255,0), 2, cv2.LINE_AA)
+            cv2.imshow('result', resultFrame)
+            if (autoMatch == 1):
+            	autoMatch = 0
 
         k = cv2.waitKey(2) & 0xff
         if (k == 27):
             # ESC で終了
+            autoMatch = 0
             break
         elif (k >= ord('0') and k <= ord('9')):
+            autoMatch = 0
             if (k - ord('0') < len(scenes)):
                 currentFragment = k - ord('0')
         elif (k == ord('t')):
+            autoMatch = 0
             # 't' でテンプレート取り込み
             template = scenes[currentFragment]
         elif (k == ord('s')):
+            autoMatch = 0
             # 's' でテンプレート保存
             k2 = cv2.waitKey(0) & 0xff
             if (k2 != 27):
@@ -319,34 +382,9 @@ def main():
                         break
                     n = n + 1
         elif (k == ord('m')):
-            # 'm' で、保存したテンプレート郡と一括マッチング (表示後、キー入力待ちで止める)
-            resultFrame = aFrame.copy()
-            p = Path('./')
-            for i in range(len(scenes)):
-                maxScore = 0
-                maxTemplate = ''
-                for f in p.glob('template_*.png'):
-                    tmpl = cv2.imread(f.as_posix())
-                    guessFrame, score = match1to1(expand(tmpl, 2, 2), expand(scenes[i], 2, 2), 0.8)
-                    if (score > maxScore):
-                        maxScore = score
-                        maxTemplate = str(f)
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    cv2.putText(guessFrame, "scene {0}".format(i), (10, 20), font, 0.5, (0, 0, 255), 2, cv2.LINE_AA)
-                    cv2.putText(guessFrame, "name {0}".format(f), (10, 40), font, 0.5, (0,0,255), 2, cv2.LINE_AA)
-                    cv2.putText(guessFrame, "score {0}".format(score), (10, 60), font, 0.5, (0,0,255), 2, cv2.LINE_AA)
-                    cv2.imshow('result_{0}'.format(f), guessFrame)
-                if (len(maxTemplate) > len("template_")):
-                    guess = maxTemplate[len("template_")]
-                else:
-                    guess = ""
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(resultFrame, "'{0}'".format(guess),
-                            (20 + mergin + int((frames[i][0] - frames[0][0]) * expandRatio), 20+ mergin + int((frames[i][1] - frames[0][1]) * expandRatio)),
-                            font, 0.6, (0,0,255), 3, cv2.LINE_AA)
-            cv2.imshow('result', resultFrame)
-            cv2.waitKey(0)
-
+            autoMatch = 1
+        elif (k == ord('a')):
+            autoMatch = 2
 
 if __name__ == '__main__':
     cap = cv2.VideoCapture(1)
